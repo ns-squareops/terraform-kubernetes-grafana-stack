@@ -1,42 +1,43 @@
 locals {
-  name        = ""
-  region      = ""
-  environment = ""
+  name        = "org"
+  region      = "asia-south1"
+  environment = "dev"
+  project     = "atmosly-439606"
+  cluster_name = "org-dev-gke-cluster"
+  location     = "asia-south1"
   additional_tags = {
-    Owner       = "organization_name"
-    Expires     = "Never"
-    Department  = "Engineering"
-    Product     = ""
+    Owner      = "atmosly"
+    Expires    = "Never"
+    Department = "Engineering"
+    Product    = ""
     Environment = local.environment
   }
 }
 
 module "pgl" {
-  source                        = "squareops/grafana-stack/kubernetes"
-  version                       = "3.0.3"
-  cluster_name                  = ""
+  source                        = "../../../"
+  # version                       = "3.0.3"
+  cluster_name                  = "org-dev-gke-cluster"
   kube_prometheus_stack_enabled = true
   loki_enabled                  = false
-  loki_scalable_enabled         = true
-  grafana_mimir_enabled         = true
-  cloudwatch_enabled            = true
+  loki_scalable_enabled         = false
+  grafana_mimir_enabled         = false
+  cloudwatch_enabled            = false
   tempo_enabled                 = false
   deployment_config = {
     hostname                            = "grafana.squareops.com"
-    storage_class_name                  = "infra-service-sc"
+    storage_class_name                  = "standard"
     prometheus_values_yaml              = file("./helm/prometheus.yaml")
     loki_values_yaml                    = file("./helm/loki.yaml")
     blackbox_values_yaml                = file("./helm/blackbox.yaml")
     grafana_mimir_values_yaml           = file("./helm/mimir.yaml")
     tempo_values_yaml                   = file("./helm/tempo.yaml")
     dashboard_refresh_interval          = ""
-    grafana_enabled                     = true
+    grafana_enabled                     = false
     prometheus_hostname                 = "prometheus.com"
     prometheus_internal_ingress_enabled = false
-    grafana_ingress_load_balancer       = "nlb"   ##Choose your load balancer type (e.g., NLB or ALB). If using ALB, ensure you provide the ACM certificate ARN for SSL.
-    ingress_class_name                  = "nginx" # enter ingress class name according to your requirement (example: "nginx", "internal-ingress", "private-nginx")
-    alb_acm_certificate_arn             = ""      #"arn:aws:acm:${local.region}:444455556666:certificate/certificate_ID"
-    private_alb_enabled                 = false   # Set to true, when wanted to deploy PGL on ALB internal
+    grafana_ingress_load_balancer       = "nlb" ##Choose your load balancer type (e.g., NLB or ALB). If using ALB, ensure you provide the ACM certificate ARN for SSL.
+    alb_acm_certificate_arn             = ""    #"arn:aws:acm:${local.region}:444455556666:certificate/certificate_ID"
     loki_internal_ingress_enabled       = false
     loki_hostname                       = "loki.com"
     mimir_s3_bucket_config = {

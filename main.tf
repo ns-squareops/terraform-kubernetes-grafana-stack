@@ -1,21 +1,20 @@
 locals {
-  alb_scheme = var.deployment_config.private_alb_enabled ? "internal" : "internet-facing"
-  oidc_provider = replace(
-    data.aws_eks_cluster.kubernetes_cluster.identity[0].oidc[0].issuer,
-    "/^https:///",
-    ""
-  )
-  base_annotations = {
+  # oidc_provider = replace(
+  #   data.aws_eks_cluster.kubernetes_cluster.identity[0].oidc[0].issuer,
+  #   "/^https:///",
+  #   ""
+  # )
+    base_annotations = {
     "grafana_folder" = "Defaults"
   }
 
   # Conditionally add CloudWatch annotation
-  additional_annotations = var.cloudwatch_enabled ? {
-    "eks.amazonaws.com/role-arn" = aws_iam_role.cloudwatch_role[0].arn
-  } : {}
+  # additional_annotations = var.cloudwatch_enabled ? {
+  #   "eks.amazonaws.com/role-arn" = aws_iam_role.cloudwatch_role[0].arn
+  # } : {}
 
   # Merge the base annotations with the additional annotations
-  annotations = merge(local.base_annotations, local.additional_annotations)
+  annotations = local.base_annotations #merge(local.base_annotations, local.additional_annotations)
 
   loki_datasource_config = <<EOF
 
@@ -56,11 +55,11 @@ locals {
 
 }
 
-data "aws_caller_identity" "current" {}
+# data "aws_caller_identity" "current" {}
 
-data "aws_eks_cluster" "kubernetes_cluster" {
-  name = var.cluster_name
-}
+# data "aws_eks_cluster" "kubernetes_cluster" {
+#   name = var.cluster_name
+# }
 
 resource "random_password" "grafana_password" {
   length  = 20
@@ -116,8 +115,8 @@ resource "helm_release" "blackbox_exporter" {
 locals {
   ingress_annotations = var.deployment_config.grafana_ingress_load_balancer == "alb" ? {
     "kubernetes.io/ingress.class"                    = "alb",
-    "alb.ingress.kubernetes.io/scheme"               = local.alb_scheme,
-    "alb.ingress.kubernetes.io/group.name"           = local.alb_scheme == "internet-facing" ? "public-alb-ingress" : "private-alb-ingress",
+    "alb.ingress.kubernetes.io/scheme"               = "internet-facing",
+    "alb.ingress.kubernetes.io/group.name"           = "pgl",
     "alb.ingress.kubernetes.io/healthcheck-path"     = "/api/health",
     "alb.ingress.kubernetes.io/healthcheck-port"     = "traffic-port",
     "alb.ingress.kubernetes.io/healthcheck-protocol" = "HTTP",
@@ -126,7 +125,7 @@ locals {
     "alb.ingress.kubernetes.io/ssl-redirect"         = "443",
     "alb.ingress.kubernetes.io/certificate-arn"      = var.deployment_config.alb_acm_certificate_arn
     } : {
-    "kubernetes.io/ingress.class"    = var.deployment_config.ingress_class_name,
+    "kubernetes.io/ingress.class"    = "nginx",
     "kubernetes.io/tls-acme"         = "false",
     "cert-manager.io/cluster-issuer" = "letsencrypt-prod"
   }
@@ -177,7 +176,6 @@ resource "helm_release" "prometheus_grafana" {
       ingress_annotations                = jsonencode(local.ingress_annotations),
       ingress_hosts                      = jsonencode(local.ingress_hosts),
       ingress_tls                        = jsonencode(local.ingress_tls),
-      ingress_ingressClassName           = var.deployment_config.grafana_ingress_load_balancer == "alb" ? "alb" : var.deployment_config.ingress_class_name
       loki_datasource_config             = var.loki_scalable_enabled ? local.loki_datasource_config : "",
       tempo_datasource_config            = var.tempo_enabled ? local.tempo_datasource_config : "",
       cw_datasource_config               = var.cloudwatch_enabled ? local.cw_datasource_config : "",
@@ -367,59 +365,59 @@ resource "kubernetes_priority_class" "priority_class" {
   preemption_policy = "PreemptLowerPriority"
 }
 
-resource "aws_iam_role" "cloudwatch_role" {
-  count = var.deployment_config.grafana_enabled && var.cloudwatch_enabled ? 1 : 0
-  name  = join("-", [var.cluster_name, "cloudwatch"])
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Effect = "Allow",
-        Principal = {
-          Federated = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.oidc_provider}"
-        },
-        Action = "sts:AssumeRoleWithWebIdentity",
-        Condition = {
-          StringEquals = {
-            "${local.oidc_provider}:aud" = "sts.amazonaws.com",
-            "${local.oidc_provider}:sub" = "system:serviceaccount:monitoring:prometheus-operator-grafana"
-          }
-        }
-      }
-    ]
-  })
-  inline_policy {
-    name = "AllowCWReadAccess"
-    policy = jsonencode({
-      Version = "2012-10-17"
-      Statement = [
-        {
-          Action = [
-            "cloudwatch:Describe*",
-            "cloudwatch:Get*",
-            "cloudwatch:List*",
-            "ec2:DescribeTags",
-            "logs:DescribeLogGroups",
-            "logs:Get*",
-            "logs:List*",
-            "logs:StartQuery",
-            "logs:StopQuery",
-            "logs:Describe*",
-            "logs:TestMetricFilter",
-            "logs:FilterLogEvents",
-            "logs:StartLiveTail",
-            "logs:StopLiveTail",
-            "oam:ListSinks",
-            "sns:Get*",
-            "sns:List*"
-          ]
-          Effect   = "Allow"
-          Resource = "*"
-        }
-      ]
-    })
-  }
-}
+# resource "aws_iam_role" "cloudwatch_role" {
+#   count = var.deployment_config.grafana_enabled && var.cloudwatch_enabled ? 1 : 0
+#   name  = join("-", [var.cluster_name, "cloudwatch"])
+#   assume_role_policy = jsonencode({
+#     Version = "2012-10-17",
+#     Statement = [
+#       {
+#         Effect = "Allow",
+#         Principal = {
+#           Federated = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/${local.oidc_provider}"
+#         },
+#         Action = "sts:AssumeRoleWithWebIdentity",
+#         Condition = {
+#           StringEquals = {
+#             "${local.oidc_provider}:aud" = "sts.amazonaws.com",
+#             "${local.oidc_provider}:sub" = "system:serviceaccount:monitoring:prometheus-operator-grafana"
+#           }
+#         }
+#       }
+#     ]
+#   })
+#   inline_policy {
+#     name = "AllowCWReadAccess"
+#     policy = jsonencode({
+#       Version = "2012-10-17"
+#       Statement = [
+#         {
+#           Action = [
+#             "cloudwatch:Describe*",
+#             "cloudwatch:Get*",
+#             "cloudwatch:List*",
+#             "ec2:DescribeTags",
+#             "logs:DescribeLogGroups",
+#             "logs:Get*",
+#             "logs:List*",
+#             "logs:StartQuery",
+#             "logs:StopQuery",
+#             "logs:Describe*",
+#             "logs:TestMetricFilter",
+#             "logs:FilterLogEvents",
+#             "logs:StartLiveTail",
+#             "logs:StopLiveTail",
+#             "oam:ListSinks",
+#             "sns:Get*",
+#             "sns:List*"
+#           ]
+#           Effect   = "Allow"
+#           Resource = "*"
+#         }
+#       ]
+#     })
+#   }
+# }
 
 resource "kubernetes_config_map" "aws_rds" {
   count = var.deployment_config.grafana_enabled && var.cloudwatch_enabled ? 1 : 0
@@ -795,27 +793,27 @@ resource "kubernetes_config_map" "aws_sns" {
   depends_on = [helm_release.prometheus_grafana]
 }
 
-# resource "kubernetes_config_map" "cluster_overview_dashboard" {
-#   count = var.deployment_config.grafana_enabled ? 1 : 0
-#   metadata {
-#     name      = "prometheus-operator-kube-p-cluster-overview"
-#     namespace = var.pgl_namespace
-#     labels = {
-#       "grafana_dashboard" : "1"
-#       "app" : "kube-prometheus-stack-grafana"
-#       "chart" : "kube-prometheus-stack-61.1.0"
-#       "release" : "prometheus-operator"
-#     }
-#     annotations = {
-#       "grafana_folder" : "Defaults"
-#     }
-#   }
+resource "kubernetes_config_map" "cluster_overview_dashboard" {
+  count = var.deployment_config.grafana_enabled ? 1 : 0
+  metadata {
+    name      = "prometheus-operator-kube-p-cluster-overview"
+    namespace = var.pgl_namespace
+    labels = {
+      "grafana_dashboard" : "1"
+      "app" : "kube-prometheus-stack-grafana"
+      "chart" : "kube-prometheus-stack-61.1.0"
+      "release" : "prometheus-operator"
+    }
+    annotations = {
+      "grafana_folder" : "Defaults"
+    }
+  }
 
-#   data = {
-#     "cluster-overview.json" = "${file("${path.module}/grafana/dashboards/cluster_overview.json")}"
-#   }
-#   depends_on = [helm_release.prometheus_grafana]
-# }
+  data = {
+    "cluster-overview.json" = "${file("${path.module}/grafana/dashboards/cluster_overview.json")}"
+  }
+  depends_on = [helm_release.prometheus_grafana]
+}
 
 resource "kubernetes_config_map" "ingress_nginx_dashboard" {
   count      = var.deployment_config.grafana_enabled ? 1 : 0
@@ -830,14 +828,14 @@ resource "kubernetes_config_map" "ingress_nginx_dashboard" {
       "release" : "prometheus-operator"
     }
     annotations = {
-      "grafana_folder" : "Nginx"
+      "grafana_folder" : "Defaults"
     }
   }
 
   data = {
-    "ingress-nginx.json"          = "${file("${path.module}/grafana/dashboards/ingress_nginx.json")}",
-    "nginx_api_host.json"         = "${file("${path.module}/grafana/dashboards/nginx_api_host.json")}",
-    "nginx_ingress.json"          = "${file("${path.module}/grafana/dashboards/nginx_ingress.json")}",
+    "ingress-nginx.json" = "${file("${path.module}/grafana/dashboards/ingress_nginx.json")}",
+    "nginx_api_host.json" = "${file("${path.module}/grafana/dashboards/nginx_api_host.json")}",
+    "nginx_ingress.json" = "${file("${path.module}/grafana/dashboards/nginx_ingress.json")}",
     "nginx_request_handling.json" = "${file("${path.module}/grafana/dashboards/nginx_request_handling.json")}"
   }
 }
@@ -1081,8 +1079,12 @@ resource "kubernetes_config_map" "loki_dashboard" {
   }
 
   data = {
-    "loki-dashboard.json"       = "${file("${path.module}/grafana/dashboards/loki.json")}",
-    "analytics-nginx-logs.json" = "${file("${path.module}/grafana/dashboards/analytics_nginx_logs.json")}"
+    "loki-dashboard.json" = "${file("${path.module}/grafana/dashboards/loki.json")}"
+    # "full-loki-dashboard.json" = "${file("${path.module}/grafana/dashboards/Full_loki_logs.json")}",
+    # "5xx.json" =  "${file("${path.module}/grafana/dashboards/5xx.json")}",
+    # "4xx.json" =  "${file("${path.module}/grafana/dashboards/4xx.json")}",
+    # "3xx.json" =  "${file("${path.module}/grafana/dashboards/3xx.json")}",
+    # "2xx.json" =  "${file("${path.module}/grafana/dashboards/2xx.json")}",
   }
 }
 
@@ -1101,7 +1103,7 @@ resource "kubernetes_config_map" "nodegroup_dashboard" {
       "release" : "prometheus-operator"
     }
     annotations = {
-      "grafana_folder" : "kubernetes"
+      "grafana_folder" : "Defaults"
     }
   }
 
